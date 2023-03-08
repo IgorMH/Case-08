@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT license.
 
-$location = 'westus3'
+$location = 'eastus'
 
 Write-Host "Log in to Azure.....`r`n" -ForegroundColor Yellow
 az login -o none
@@ -14,9 +14,10 @@ az account set --subscription $subscriptionID
 $deploymentName = 'TradableDigitalSADeploy-' + ([string][guid]::NewGuid()).Substring(0,5)
 
 Write-Host "Started deploying Tradable Digital resources.....`r`n" -ForegroundColor Yellow
-$deploymentResult = az deployment sub create --template-file .\main.bicep -l $location -n $deploymentName
+$deploymentResult = az deployment sub create --template-file .\main.bicep -l $location -n $deploymentName --only-show-errors
 $joinedString = $deploymentResult -join "" 
 $jsonString = ConvertFrom-Json $joinedString
+
 
 $kubernetesName  = $jsonString.properties.outputs.aksName.value
 $containerRegistryName  = $jsonString.properties.outputs.acrName.value
@@ -27,9 +28,9 @@ $tsaUserIdentityClientId = $jsonString.properties.outputs.tsaUserIdentityClientI
 $storageAccountName = $jsonString.properties.outputs.storageAccountName.value
 
 Write-Host "--------------------------------------------`r`n" -ForegroundColor White
-Write-Host "Deployment output: `r`n" -ForegroundColor White
-Write-Host "Subscription Id: $subscriptionID `r`n" -ForegroundColor Yellow
-Write-Host "Tradable Digital resource group: $resourcegroupName `r`n" -ForegroundColor Yellow
+Write-Host "Deployment output: $deploymentName" -ForegroundColor White
+Write-Host "Subscription Id: $subscriptionID" -ForegroundColor Yellow
+Write-Host "Tradable Digital resource group: $resourcegroupName" -ForegroundColor Yellow
 Write-Host "Kubernetes Account: $kubernetesName" -ForegroundColor Yellow
 Write-Host "Container registry: $containerRegistryName" -ForegroundColor Yellow
 Write-Host "Cosmos DB account: $cosmosName" -ForegroundColor Yellow
@@ -38,7 +39,7 @@ Write-Host "User Assigned Identity Client Id: $tsaUserIdentityClientId " -Foregr
 Write-Host "--------------------------------------------`r`n" -ForegroundColor White
 
 # Get Storage Account Key
-$storageAccountKey = az storage account keys list -g $resourceGroupName -n $storageAccountName --query "[?keyName == 'key1'].value" -o tsv
+$storageAccountKey = az storage account keys list --resource-group $resourceGroupName --account-name $storageAccountName --query "[?keyName == 'key1'].value" -o tsv
 
 $keyfilename = "keys.xml"
 $keycontainerName = "giftkey"
@@ -46,18 +47,14 @@ $keycontainerName = "giftkey"
 # Create keys.xml file & upload key file to Storage Container
 $keycontent = '<?xml version="1.0" encoding="utf-8"?><repository></repository>'
 $keycontent | Set-Content $keyfilename
-az storage blob upload -f .\$keyfilename `
-                            --account-key $storageAccountKey `
-                            --account-name $storageAccountName `
-                            -c $keycontainerName `
-                            -n $keyfilename
+az storage blob upload --file .\$keyfilename --account-key $storageAccountKey --account-name $storageAccountName -c $keycontainerName -n $keyfilename
 
 Set-location "..\..\..\..\src"
 # # Update the settings in console app setting 
-((Get-Content -path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{SubscriptionId}', $subscriptionID) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
-((Get-Content -path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{ResourceGroupName}', $resourcegroupName) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
-((Get-Content -path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{DatabaseAccountName}', $cosmosName) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
-((Get-Content -path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{ManagedIdentityId}', $tsaUserIdentityClientId) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
+((Get-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{SubscriptionId}', $subscriptionID) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
+((Get-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{ResourceGroupName}', $resourcegroupName) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
+((Get-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{DatabaseAccountName}', $cosmosName) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
+((Get-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json -Raw) -replace '{ManagedIdentityId}', $tsaUserIdentityClientId) | Set-Content -Path Contoso.DigitalGoods.SetUp\appsettings.json
 Write-Host "Updated appsettings.json for Tradable Digital Service.....`r`n" 
 
 Write-Host "All resources are deployed successfully.....`r`n" -ForegroundColor Green
